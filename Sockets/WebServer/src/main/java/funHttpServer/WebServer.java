@@ -1,5 +1,5 @@
 /*
-Simple Web Server in Java which allows you to call 
+Simple Web Server in Java which allows you to call
 localhost:9000/ and show you the root.html webpage from the www/root.html folder
 You can also do some other simple GET requests:
 1) /random shows you a random picture (well random from the set defined)
@@ -9,8 +9,8 @@ You can also do some other simple GET requests:
 5) /github?query=users/amehlhase316/repos (or other GitHub repo owners) will lead to receiving
    JSON which will for now only be printed in the console. See the todo below
 
-The reading of the request is done "manually", meaning no library that helps making things a 
-little easier is used. This is done so you see exactly how to pars the request and 
+The reading of the request is done "manually", meaning no library that helps making things a
+little easier is used. This is done so you see exactly how to pars the request and
 write a response back
 */
 
@@ -25,8 +25,12 @@ import java.util.Random;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.nio.charset.Charset;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-class WebServer {
+
+public class WebServer {
   public static void main(String args[]) {
     WebServer server = new WebServer(9000);
   }
@@ -110,7 +114,7 @@ class WebServer {
         // find end of header("\n\n")
         if (line == null || line.equals(""))
           done = true;
-        // parse GET format ("GET <path> HTTP/1.1")
+          // parse GET format ("GET <path> HTTP/1.1")
         else if (line.startsWith("GET")) {
           int firstSpace = line.indexOf(" ");
           int secondSpace = line.indexOf(" ", firstSpace + 1);
@@ -193,30 +197,79 @@ class WebServer {
             builder.append("\n");
             builder.append("File not found: " + file);
           }
-        } else if (request.contains("multiply?")) {
-          // This multiplies two numbers, there is NO error handling, so when
-          // wrong data is given this just crashes
+        } else if (request.contains("wordcount?")) {
+          Map<String, String> queryPairs = splitQuery(request.replace("wordcount?", ""));
+          String text = queryPairs.get("text");
 
+          if (text == null || text.isEmpty()) {
+            // Missing or empty text parameter
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error: Missing or empty 'text' parameter.");
+          } else {
+            // Count the number of words
+            String[] words = text.split("\\s+");
+            int wordCount = words.length;
+
+            // Build response
+            builder.append("HTTP/1.1 200 OK\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Word count: ").append(wordCount);
+          }
+        } else if (request.contains("reverse?")) {
+          Map<String, String> queryPairs = splitQuery(request.replace("reverse?", ""));
+          String text = queryPairs.get("text");
+
+          if (text == null || text.isEmpty()) {
+            // Missing or empty text parameter
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error: Missing or empty 'text' parameter.");
+          } else {
+            // Reverse the string
+            StringBuilder reversedText = new StringBuilder(text);
+            reversedText.reverse();
+
+            // Build response
+            builder.append("HTTP/1.1 200 OK\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Reversed text: ").append(reversedText);
+          }
+        } else if (request.contains("multiply?")) {
           Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-          // extract path parameters
           query_pairs = splitQuery(request.replace("multiply?", ""));
 
-          // extract required fields from parameters
-          Integer num1 = Integer.parseInt(query_pairs.get("num1"));
-          Integer num2 = Integer.parseInt(query_pairs.get("num2"));
+          String num1Str = query_pairs.get("num1");
+          String num2Str = query_pairs.get("num2");
 
-          // do math
-          Integer result = num1 * num2;
+          if (num1Str == null || num2Str == null) {
+            // Missing parameters
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error: Missing parameters. Please provide num1 and num2.");
+          } else {
+            try {
+              Integer num1 = Integer.parseInt(num1Str);
+              Integer num2 = Integer.parseInt(num2Str);
+              Integer result = num1 * num2;
 
-          // Generate response
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Result is: " + result);
-
-          // TODO: Include error handling here with a correct error code and
-          // a response that makes sense
-
+              builder.append("HTTP/1.1 200 OK\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Result is: " + result);
+            } catch (NumberFormatException e) {
+              // Invalid parameters
+              builder.append("HTTP/1.1 400 Bad Request\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Error: Invalid parameters. num1 and num2 must be integers.");
+            }
+          }
         } else if (request.contains("github?")) {
           // pulls the query from the request and runs it with GitHub's REST API
           // check out https://docs.github.com/rest/reference/
@@ -238,6 +291,31 @@ class WebServer {
           // TODO: Parse the JSON returned by your fetch and create an appropriate
           // response based on what the assignment document asks for
 
+          try {
+            JSONArray reposArray = new JSONArray(json);
+            for (int i = 0; i < reposArray.length(); i++) {
+              JSONObject repo = reposArray.getJSONObject(i);
+              String fullName = repo.getString("full_name");
+              int id = repo.getInt("id");
+              JSONObject owner = repo.getJSONObject("owner");
+              String ownerLogin = owner.getString("login");
+
+              // Add repository information to HTML response
+              builder.append("Repository: ").append(fullName).append("<br>");
+              builder.append("ID: ").append(id).append("<br>");
+              builder.append("Owner: ").append(ownerLogin).append("<br><br>");
+            }
+          } catch (JSONException e) {
+            e.printStackTrace();
+            builder.append("Error parsing JSON data");
+          }
+
+          builder.append("</body></html>");
+
+          // Convert HTML response to byte array
+          byte[] responseBytes = builder.toString().getBytes();
+          return responseBytes;
+
         } else {
           // if the request is not recognized at all
 
@@ -257,6 +335,8 @@ class WebServer {
 
     return response;
   }
+
+
 
   /**
    * Method to read in a query and split it up correctly
@@ -330,7 +410,7 @@ class WebServer {
    * a method to make a web request. Note that this method will block execution
    * for up to 20 seconds while the request is being satisfied. Better to use a
    * non-blocking request.
-   * 
+   *
    * @param aUrl the String indicating the query url for the OMDb api search
    * @return the String result of the http request.
    *
